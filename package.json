@@ -1,0 +1,12 @@
+{
+  "name": "keyboardrum",
+  "private": true,
+  "scripts": {
+    "dev": "python3 -m http.server 1420 --directory frontend",
+    "tauri:dev": "tauri dev",
+    "tauri:build": "tauri build"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.0.0"
+  }
+}

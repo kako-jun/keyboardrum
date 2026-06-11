@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>keyboardrum</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; height: 100%;
+    background: #0e0f13; color: #e7e9ee;
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    -webkit-user-select: none; user-select: none;
+    overflow: hidden;
+  }
+  body { display: flex; flex-direction: column; }
+  header {
+    padding: 10px 14px; display: flex; align-items: baseline; gap: 10px;
+    border-bottom: 1px solid #23252e;
+  }
+  header h1 { font-size: 15px; margin: 0; letter-spacing: 1px; }
+  header h1 b { color: #ff8a3d; }
+  header .sub { font-size: 11px; color: #7b8095; }
+  #hint {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    font-size: 14px; color: #9aa0b4; background: rgba(14,15,19,.86); cursor: pointer;
+    z-index: 5; text-align: center; line-height: 1.7;
+  }
+  #hint.off { display: none; }
+  main { flex: 1; display: flex; flex-direction: column; gap: 12px; padding: 14px; }
+  .kit { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; flex: 1; }
+  .zone {
+    border: 1px solid #2a2d38; border-radius: 8px; padding: 8px 10px;
+    display: flex; flex-direction: column; justify-content: center; gap: 3px;
+    transition: background .04s linear, border-color .04s linear, transform .04s linear;
+  }
+  .zone .name { font-size: 13px; font-weight: 700; }
+  .zone .keys { font-size: 10px; color: #71768c; word-break: break-all; }
+  .zone.hit { transform: translateY(1px); }
+  /* per-piece accent colors */
+  .p-kick   { --c: #ff5d5d; } .p-snare { --c: #ffd24a; }
+  .p-hihat  { --c: #6fe3ff; } .p-openhat { --c: #4ab8ff; }
+  .p-tomMid { --c: #b98bff; } .p-tomLow { --c: #8a7bff; }
+  .p-ride   { --c: #6affc0; } .p-crash { --c: #ff9f43; }
+  .p-rim    { --c: #c7ccda; }
+  .zone .name { color: var(--c); }
+  .zone.hit { background: color-mix(in srgb, var(--c) 22%, #0e0f13); border-color: var(--c); }
+  footer {
+    border-top: 1px solid #23252e; padding: 8px 14px; display: flex;
+    align-items: center; gap: 14px; font-size: 11px; color: #7b8095;
+  }
+  #ticker { flex: 1; height: 16px; overflow: hidden; white-space: nowrap; font-size: 15px; }
+  #count { color: #e7e9ee; }
+</style>
+</head>
+<body>
+  <header>
+    <h1><b>keyboardrum</b></h1>
+    <span class="sub">タイプするとドラムが鳴る — 手の領域＝ドラムキット（試作・手続き合成音）</span>
+  </header>
+
+  <main>
+    <div class="kit" id="kit"></div>
+  </main>
+
+  <footer>
+    <span>hits: <span id="count">0</span></span>
+    <div id="ticker"></div>
+  </footer>
+
+  <div id="hint">クリック / どれかキーを押して開始<br><span style="font-size:11px">スペース=キック、左ホーム=スネア、右ホーム=ハイハット…</span></div>
+
+<script>
+(() => {
+  "use strict";
+
+  // ---------- 領域マッピング（手のゾーン → ドラムパーツ） ----------
+  // event.code ベース。修飾キー単体は無視（Shift+大文字で二重に鳴らさない）。
+  const ZONES = {
+    kick:    { label: "キック (足)",       keys: ["Space"] },
+    snare:   { label: "スネア",            keys: ["KeyA","KeyS","KeyD","KeyF","KeyG"] },
+    tomMid:  { label: "ハイタム",          keys: ["KeyQ","KeyW","KeyE","KeyR","KeyT"] },
+    tomLow:  { label: "フロアタム",        keys: ["KeyZ","KeyX","KeyC","KeyV","KeyB"] },
+    hihat:   { label: "ハイハット",        keys: ["KeyH","KeyJ","KeyK","KeyL","Semicolon"] },
+    ride:    { label: "ライド",            keys: ["KeyY","KeyU","KeyI","KeyO","KeyP"] },
+    rim:     { label: "リム / クリック",   keys: ["KeyN","KeyM","Comma","Period","Slash","Backspace"] },
+    openhat: { label: "オープンハット",    keys: ["Tab","BracketLeft","BracketRight","Backslash","Quote"] },
+    crash:   { label: "クラッシュ",        keys: ["Enter","Backquote","Digit1","Digit2","Digit3","Digit4","Digit5","Digit6","Digit7","Digit8","Digit9","Digit0","Minus","Equal"] },
+  };
+  const ICON = { kick:"●", snare:"◆", hihat:"×", openhat:"x", tomMid:"▲", tomLow:"▼", ride:"◇", crash:"✺", rim:"·" };
+
+  const KEYMAP = {};
+  for (const piece in ZONES) for (const k of ZONES[piece].keys) KEYMAP[k] = piece;
+
+  // ---------- Web Audio 手続き合成ドラム（試作。後で生ドラムサンプルに差し替え） ----------
+  let ctx = null, noiseBuf = null;
+  function audio() {
+    if (!ctx) {
+      ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const n = ctx.sampleRate * 1.0, buf = ctx.createBuffer(1, n, ctx.sampleRate);
+      const d = buf.getChannelData(0);
+      for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
+      noiseBuf = buf;
+    }
+    if (ctx.state === "suspended") ctx.resume();
+    return ctx;
+  }
+  function gain(t0, peak, decay) {
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(peak, t0 + 0.002);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + decay);
+    g.connect(ctx.destination);
+    return g;
+  }
+  function noise(t0, peak, decay, type, freq, q) {
+    const src = ctx.createBufferSource(); src.buffer = noiseBuf;
+    const f = ctx.createBiquadFilter(); f.type = type; f.frequency.value = freq; if (q) f.Q.value = q;
+    const g = gain(t0, peak, decay);
+    src.connect(f); f.connect(g); src.start(t0); src.stop(t0 + decay + 0.02);
+  }
+  function tone(t0, peak, decay, type, f0, f1) {
+    const o = ctx.createOscillator(); o.type = type;
+    o.frequency.setValueAtTime(f0, t0);
+    if (f1) o.frequency.exponentialRampToValueAtTime(f1, t0 + decay * 0.9);
+    const g = gain(t0, peak, decay);
+    o.connect(g); o.start(t0); o.stop(t0 + decay + 0.02);
+  }
+
+  // v = { g: ゲイン倍率, k: ディケイ倍率, p: ピッチ倍率 }（ラウンドロビン用の揺らぎ）
+  const VOICES = {
+    kick:   v => tone(ctx.currentTime, 0.9*v.g, 0.18*v.k, "sine", 150*v.p, 48),
+    tomMid: v => tone(ctx.currentTime, 0.6*v.g, 0.22*v.k, "sine", 200*v.p, 110),
+    tomLow: v => tone(ctx.currentTime, 0.7*v.g, 0.30*v.k, "sine", 130*v.p, 70),
+    snare:  v => { tone(ctx.currentTime, 0.35*v.g, 0.10*v.k, "triangle", 190*v.p);
+                   noise(ctx.currentTime, 0.5*v.g, 0.16*v.k, "highpass", 1400*v.p); },
+    hihat:  v => noise(ctx.currentTime, 0.28*v.g, 0.045*v.k, "highpass", 8000*v.p),
+    openhat:v => noise(ctx.currentTime, 0.26*v.g, 0.32*v.k, "highpass", 7000*v.p),
+    ride:   v => noise(ctx.currentTime, 0.22*v.g, 0.50*v.k, "bandpass", 6500*v.p, 1.2),
+    crash:  v => noise(ctx.currentTime, 0.34*v.g, 0.90*v.k, "highpass", 5000*v.p),
+    rim:    v => { tone(ctx.currentTime, 0.3*v.g, 0.03*v.k, "square", 420*v.p);
+                   noise(ctx.currentTime, 0.18*v.g, 0.03*v.k, "highpass", 3000*v.p); },
+  };
+
+  // ---------- ラウンドロビン：パーツごとに3バリアント巡回＋微ジッタ ----------
+  const RR = [ { g:1.00, k:1.00, p:1.000 }, { g:0.92, k:1.10, p:0.985 }, { g:1.07, k:0.92, p:1.018 } ];
+  const rrIndex = {};
+  function variation(piece) {
+    const i = rrIndex[piece] = ((rrIndex[piece] ?? -1) + 1) % RR.length;
+    const base = RR[i], j = () => 1 + (Math.random() - 0.5) * 0.06; // ±3% ジッタ
+    return { g: base.g * j(), k: base.k * j(), p: base.p * j() };
+  }
+
+  // ---------- 発音ロジック：ポリフォニー＋同一パーツ合流 ----------
+  const COALESCE_MS = 14;            // 同一パーツがこの窓内に再来したら1回に合流
+  const lastHit = {};                // piece -> 最後に鳴らした時刻
+  window.__kr = { total: 0, hits: {}, coalesced: 0 }; // 検証用デバッグ状態
+
+  function trigger(piece) {
+    const now = performance.now();
+    if (now - (lastHit[piece] ?? -1e9) < COALESCE_MS) { window.__kr.coalesced++; return; } // 同一パーツは1回
+    lastHit[piece] = now;            // 異なるパーツは各自の時刻 → 独立に同時発音
+    try { audio(); (VOICES[piece] || (()=>{}))(variation(piece)); }
+    catch (err) { /* 音声が使えなくても入力処理は止めない */ }
+    flash(piece);
+    window.__kr.total++;
+    window.__kr.hits[piece] = (window.__kr.hits[piece] || 0) + 1;
+    document.getElementById("count").textContent = window.__kr.total;
+  }
+
+  // ---------- 入力 ----------
+  const pressed = new Set();
+  addEventListener("keydown", e => {
+    if (e.repeat) return;                                  // オートリピート無視
+    const piece = KEYMAP[e.code];
+    if (!piece) return;
+    if (e.code === "Tab" || e.code === "Backspace") e.preventDefault();
+    document.getElementById("hint").classList.add("off");
+    if (pressed.has(e.code)) return;                       // 念のための二重防止
+    pressed.add(e.code);
+    trigger(piece);
+  });
+  addEventListener("keyup", e => pressed.delete(e.code));
+  document.getElementById("hint").addEventListener("click", () => {
+    audio(); document.getElementById("hint").classList.add("off");
+  });
+
+  // ---------- ビジュアル ----------
+  const cells = {};
+  const kit = document.getElementById("kit");
+  // 左列＝左手ゾーン、右列＝右手ゾーン、として並べる
+  const ORDER = ["tomMid","ride","snare","hihat","tomLow","openhat","rim","crash","kick"];
+  for (const piece of ORDER) {
+    const z = ZONES[piece];
+    const el = document.createElement("div");
+    el.className = "zone p-" + piece;
+    if (piece === "kick") el.style.gridColumn = "1 / span 2";
+    el.innerHTML = `<span class="name">${ICON[piece]} ${z.label}</span>` +
+      `<span class="keys">${z.keys.map(k => k.replace("Key","").replace("Digit","")).join(" ")}</span>`;
+    kit.appendChild(el);
+    cells[piece] = el;
+  }
+  let ticker = "";
+  function flash(piece) {
+    const el = cells[piece];
+    if (el) { el.classList.add("hit"); setTimeout(() => el.classList.remove("hit"), 70); }
+    ticker = (ICON[piece] + ticker).slice(0, 60);
+    document.getElementById("ticker").textContent = ticker;
+  }
+})();
+</script>
+</body>
+</html>
