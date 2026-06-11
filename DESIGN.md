@@ -54,6 +54,32 @@ PCで文字を打つたびに、入力のついでにドラムが鳴る常駐ア
    - Wayland は全キー盗聴を原則禁止 → X11 / evdev 直読み（input グループ）/ macOS Accessibility /
      Windows 低レベルフック、のプラットフォーム別実装。
 
+## ビルド・配信（1フロント・2ターゲット）
+
+Tauri は「Web アプリを native の殻で包む」もの。`frontend/` が Web アプリの実体、`src-tauri/` は
+その**ビルド出力を消費して**デスクトップアプリに包むだけ。1フォルダで同居する。
+
+- **Web サイト**：`frontend/` をそのまま静的ホスティング（Cloudflare Pages / `keyboardrum.llll-ll.com`）。
+  `npm run build` → 静的出力をデプロイ（#6）。
+- **デスクトップアプリ**：`npm run tauri:build` で**同じ frontend** を native バイナリに同梱（#4・GitHub Releases）。
+- `tauri.conf.json` の `frontendDist` が frontend の出力を指すだけ＝二重実装しない。
+
+### プラットフォーム差は1箇所（InputAdapter）に閉じ込める
+
+Web ブラウザに Tauri の native 機能（グローバルフック・トレイ・`@tauri-apps/api`）は無い。判定して分岐：
+
+- 判定：`'__TAURI_INTERNALS__' in window`（Tauri v2）。
+- **web アダプタ**：フォーカス時 `keydown` だけ（現状）。
+- **Tauri アダプタ**：Rust グローバルフックを足す（#4）。
+
+これは `InputAdapter`（#2）の置き場そのもの。共有エンジン（発音ロジック・音色）は触らない。
+
+### 運用の勘所
+
+- **CI を分ける**：Web デプロイ（Pages）は frontend だけ＝Rust 不要。Tauri ビルドは OS別ランナーで別ワークフロー。
+- **相対パス**：`tauri://localhost` でも subdomain でもアセットは相対参照で両対応。
+- **`@tauri-apps/api` は判定ガード or 動的 import**：web バンドルで未ガード実行すると落ちる。`inTauri` の中だけで読む。
+
 ## 今後の候補
 
 - ラウンドロビン用の生ドラムサンプル取り込み（`.h2drumkit` パース）。
