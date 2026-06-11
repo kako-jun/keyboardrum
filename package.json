@@ -2,7 +2,7 @@
   "name": "keyboardrum",
   "private": true,
   "scripts": {
-    "dev": "python3 -m http.server 1420 --directory frontend",
+    "dev": "npx --yes serve frontend -l 1420",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build"
   },

@@ -12,13 +12,15 @@ the left home row is the snare, the right home row is the hi-hat, and so on.
 ## いま試す（ビルド不要・ブラウザ）
 
 ```sh
-# どれでもOK
-xdg-open frontend/index.html         # ファイルを直接開く
-# または静的サーバ経由
-npm run dev                          # http://localhost:1420
+npm run dev   # 静的配信。表示される Local / Network の URL をブラウザで開く
 ```
 
-ウィンドウにフォーカスした状態でタイプすると鳴ります（試作はフォーカス専用）。
+- ローカルなら `http://localhost:1420`。
+- **リモート開発（SSH 等）**なら、表示される **Network** の URL（`http://<dev-host>:1420`）を手元のブラウザで開く。
+  Web Audio もキー入力も手元側で動くので、音は手元のスピーカーから鳴る。
+- 単に `frontend/index.html` をブラウザで直接開いてもよい（ローカルのみ）。
+
+ブラウザのウィンドウにフォーカスした状態でタイプすると鳴ります（試作はフォーカス専用）。
 
 ## ネイティブ（Tauri）
 
