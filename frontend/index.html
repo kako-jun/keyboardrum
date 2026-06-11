@@ -35,17 +35,15 @@
     display: flex; flex-direction: column; justify-content: center; gap: 3px;
     transition: background .04s linear, border-color .04s linear, transform .04s linear;
   }
-  .zone .name { font-size: 13px; font-weight: 700; }
+  .zone .name { font-size: 13px; font-weight: 700; color: var(--c); }
+  .zone .name .sym { display: inline-block; width: 1.2em; text-align: center; }
   .zone .keys { font-size: 10px; color: #71768c; word-break: break-all; }
-  .zone.hit { transform: translateY(1px); }
-  /* per-piece accent colors */
-  .p-kick   { --c: #ff5d5d; } .p-snare { --c: #ffd24a; }
-  .p-hihat  { --c: #6fe3ff; } .p-openhat { --c: #4ab8ff; }
-  .p-tomMid { --c: #b98bff; } .p-tomLow { --c: #8a7bff; }
-  .p-ride   { --c: #6affc0; } .p-crash { --c: #ff9f43; }
-  .p-rim    { --c: #c7ccda; }
-  .zone .name { color: var(--c); }
-  .zone.hit { background: color-mix(in srgb, var(--c) 22%, #0e0f13); border-color: var(--c); }
+  .zone.hit { transform: translateY(1px); background: color-mix(in srgb, var(--c) 22%, #0e0f13); border-color: var(--c); }
+  .p-kick { --c:#ff5d5d; } .p-snare { --c:#ffd24a; }
+  .p-tomHi { --c:#b98bff; } .p-tomFloor { --c:#8a7bff; }
+  .p-hihat { --c:#6fe3ff; } .p-pedalHat { --c:#3fb8e6; }
+  .p-ride { --c:#6affc0; } .p-openhat { --c:#4ab8ff; }
+  .p-crash { --c:#ff9f43; } .p-rim { --c:#c7ccda; }
   footer {
     border-top: 1px solid #23252e; padding: 8px 14px; display: flex;
     align-items: center; gap: 14px; font-size: 11px; color: #7b8095;
@@ -57,7 +55,7 @@
 <body>
   <header>
     <h1><b>keyboardrum</b></h1>
-    <span class="sub">タイプするとドラムが鳴る — 手の領域＝ドラムキット（試作・手続き合成音）</span>
+    <span class="sub">実機準拠の配置（ハイハット=左 / ライド=右）・記号はドラム譜（● 打面 / × シンバル / ○ オープン / ⊗ クロススティック）</span>
   </header>
 
   <main>
@@ -69,31 +67,32 @@
     <div id="ticker"></div>
   </footer>
 
-  <div id="hint">クリック / どれかキーを押して開始<br><span style="font-size:11px">スペース=キック、左ホーム=スネア、右ホーム=ハイハット…</span></div>
+  <div id="hint">クリック / どれかキーを押して開始<br><span style="font-size:11px">スペース=キック（足）、左=ハイハット/スネア、右=ライド、どのキーも鳴ります</span></div>
 
 <script>
 (() => {
   "use strict";
 
-  // ---------- 領域マッピング（手のゾーン → ドラムパーツ） ----------
-  // event.code ベース。修飾キー単体は無視（Shift+大文字で二重に鳴らさない）。
+  // ---------- 領域マッピング（実機ドラムキットの配置に準拠） ----------
+  // 記号 sym はドラム譜の慣習: ● 打面（キック/スネア/タム）, × シンバル/ハット, ○ オープンハット, ⊗ クロススティック。
+  // 実機どおり「ハイハットは左・ライドは右」。どの物理キーも鳴る（未マップは rim にフォールバック）。
   const ZONES = {
-    kick:    { label: "キック (足)",       keys: ["Space"] },
-    snare:   { label: "スネア",            keys: ["KeyA","KeyS","KeyD","KeyF","KeyG"] },
-    tomMid:  { label: "ハイタム",          keys: ["KeyQ","KeyW","KeyE","KeyR","KeyT"] },
-    tomLow:  { label: "フロアタム",        keys: ["KeyZ","KeyX","KeyC","KeyV","KeyB"] },
-    hihat:   { label: "ハイハット",        keys: ["KeyH","KeyJ","KeyK","KeyL","Semicolon"] },
-    ride:    { label: "ライド",            keys: ["KeyY","KeyU","KeyI","KeyO","KeyP"] },
-    rim:     { label: "リム / クリック",   keys: ["KeyN","KeyM","Comma","Period","Slash","Backspace"] },
-    openhat: { label: "オープンハット",    keys: ["Tab","BracketLeft","BracketRight","Backslash","Quote"] },
-    crash:   { label: "クラッシュ",        keys: ["Enter","Backquote","Digit1","Digit2","Digit3","Digit4","Digit5","Digit6","Digit7","Digit8","Digit9","Digit0","Minus","Equal"] },
+    hihat:    { label:"ハイハット (左手)", sym:"×", keys:["KeyQ","KeyW","KeyE","KeyR","KeyT"] },
+    crash:    { label:"クラッシュ",        sym:"×", keys:["KeyY","KeyU","KeyI","KeyO","KeyP","Enter","Backspace","Backquote","Digit1","Digit2","Digit3","Digit4","Digit5","Digit6","Digit7","Digit8","Digit9","Digit0","Minus","Equal","Escape","F1","F2","F3","F4","F5","F6","F7","F8","F9","F10","F11","F12","ShiftRight","ControlRight","AltRight","MetaRight","ContextMenu"] },
+    snare:    { label:"スネア",            sym:"●", keys:["KeyA","KeyS","KeyD","KeyF","KeyG"] },
+    ride:     { label:"ライド (右手)",     sym:"×", keys:["KeyH","KeyJ","KeyK","KeyL","Semicolon"] },
+    tomHi:    { label:"ハイタム",          sym:"●", keys:["KeyZ","KeyX","KeyC","KeyV","KeyB","ArrowUp"] },
+    tomFloor: { label:"フロアタム",        sym:"●", keys:["KeyN","KeyM","Comma","Period","Slash","ArrowDown"] },
+    pedalHat: { label:"ハイハット (足)",   sym:"×", keys:["Tab","CapsLock","ShiftLeft","ControlLeft","AltLeft","MetaLeft"] },
+    openhat:  { label:"オープンハット",    sym:"○", keys:["BracketLeft","BracketRight","Backslash","Quote"] },
+    rim:      { label:"クロススティック",  sym:"⊗", keys:["Delete","Insert","Home","End","PageUp","PageDown","ArrowLeft","ArrowRight"] },
+    kick:     { label:"キック (足)",       sym:"●", keys:["Space"] },
   };
-  const ICON = { kick:"●", snare:"◆", hihat:"×", openhat:"x", tomMid:"▲", tomLow:"▼", ride:"◇", crash:"✺", rim:"·" };
-
+  const SYM = {}; for (const p in ZONES) SYM[p] = ZONES[p].sym;
   const KEYMAP = {};
   for (const piece in ZONES) for (const k of ZONES[piece].keys) KEYMAP[k] = piece;
 
-  // ---------- Web Audio 手続き合成ドラム（試作。後で生ドラムサンプルに差し替え） ----------
+  // ---------- Web Audio 手続き合成ドラム（本番採用。揺らぎは合成なら無限にタダ） ----------
   let ctx = null, noiseBuf = null;
   function audio() {
     if (!ctx) {
@@ -130,37 +129,38 @@
 
   // v = { g: ゲイン倍率, k: ディケイ倍率, p: ピッチ倍率 }（ラウンドロビン用の揺らぎ）
   const VOICES = {
-    kick:   v => tone(ctx.currentTime, 0.9*v.g, 0.18*v.k, "sine", 150*v.p, 48),
-    tomMid: v => tone(ctx.currentTime, 0.6*v.g, 0.22*v.k, "sine", 200*v.p, 110),
-    tomLow: v => tone(ctx.currentTime, 0.7*v.g, 0.30*v.k, "sine", 130*v.p, 70),
-    snare:  v => { tone(ctx.currentTime, 0.35*v.g, 0.10*v.k, "triangle", 190*v.p);
-                   noise(ctx.currentTime, 0.5*v.g, 0.16*v.k, "highpass", 1400*v.p); },
-    hihat:  v => noise(ctx.currentTime, 0.28*v.g, 0.045*v.k, "highpass", 8000*v.p),
-    openhat:v => noise(ctx.currentTime, 0.26*v.g, 0.32*v.k, "highpass", 7000*v.p),
-    ride:   v => noise(ctx.currentTime, 0.22*v.g, 0.50*v.k, "bandpass", 6500*v.p, 1.2),
-    crash:  v => noise(ctx.currentTime, 0.34*v.g, 0.90*v.k, "highpass", 5000*v.p),
-    rim:    v => { tone(ctx.currentTime, 0.3*v.g, 0.03*v.k, "square", 420*v.p);
-                   noise(ctx.currentTime, 0.18*v.g, 0.03*v.k, "highpass", 3000*v.p); },
+    kick:     v => tone(ctx.currentTime, 0.9*v.g, 0.18*v.k, "sine", 150*v.p, 48),
+    snare:    v => { tone(ctx.currentTime, 0.35*v.g, 0.10*v.k, "triangle", 190*v.p);
+                     noise(ctx.currentTime, 0.5*v.g, 0.16*v.k, "highpass", 1400*v.p); },
+    tomHi:    v => tone(ctx.currentTime, 0.6*v.g, 0.22*v.k, "sine", 220*v.p, 120),
+    tomFloor: v => tone(ctx.currentTime, 0.7*v.g, 0.30*v.k, "sine", 120*v.p, 70),
+    hihat:    v => noise(ctx.currentTime, 0.28*v.g, 0.045*v.k, "highpass", 8000*v.p),
+    pedalHat: v => noise(ctx.currentTime, 0.20*v.g, 0.030*v.k, "highpass", 9000*v.p),
+    ride:     v => noise(ctx.currentTime, 0.22*v.g, 0.50*v.k, "bandpass", 6500*v.p, 1.2),
+    openhat:  v => noise(ctx.currentTime, 0.26*v.g, 0.32*v.k, "highpass", 7000*v.p),
+    crash:    v => noise(ctx.currentTime, 0.34*v.g, 0.90*v.k, "highpass", 5000*v.p),
+    rim:      v => { tone(ctx.currentTime, 0.3*v.g, 0.03*v.k, "square", 420*v.p);
+                     noise(ctx.currentTime, 0.18*v.g, 0.03*v.k, "highpass", 3000*v.p); },
   };
 
-  // ---------- ラウンドロビン：パーツごとに3バリアント巡回＋微ジッタ ----------
+  // ---------- ラウンドロビン：3バリアント巡回＋微ジッタ（合成なので無限に揺らせる） ----------
   const RR = [ { g:1.00, k:1.00, p:1.000 }, { g:0.92, k:1.10, p:0.985 }, { g:1.07, k:0.92, p:1.018 } ];
   const rrIndex = {};
   function variation(piece) {
     const i = rrIndex[piece] = ((rrIndex[piece] ?? -1) + 1) % RR.length;
-    const base = RR[i], j = () => 1 + (Math.random() - 0.5) * 0.06; // ±3% ジッタ
+    const base = RR[i], j = () => 1 + (Math.random() - 0.5) * 0.06;
     return { g: base.g * j(), k: base.k * j(), p: base.p * j() };
   }
 
   // ---------- 発音ロジック：ポリフォニー＋同一パーツ合流 ----------
-  const COALESCE_MS = 14;            // 同一パーツがこの窓内に再来したら1回に合流
-  const lastHit = {};                // piece -> 最後に鳴らした時刻
-  window.__kr = { total: 0, hits: {}, coalesced: 0 }; // 検証用デバッグ状態
+  const COALESCE_MS = 14;
+  const lastHit = {};
+  window.__kr = { total: 0, hits: {}, coalesced: 0 };
 
   function trigger(piece) {
     const now = performance.now();
-    if (now - (lastHit[piece] ?? -1e9) < COALESCE_MS) { window.__kr.coalesced++; return; } // 同一パーツは1回
-    lastHit[piece] = now;            // 異なるパーツは各自の時刻 → 独立に同時発音
+    if (now - (lastHit[piece] ?? -1e9) < COALESCE_MS) { window.__kr.coalesced++; return; }
+    lastHit[piece] = now;
     try { audio(); (VOICES[piece] || (()=>{}))(variation(piece)); }
     catch (err) { /* 音声が使えなくても入力処理は止めない */ }
     flash(piece);
@@ -169,15 +169,15 @@
     document.getElementById("count").textContent = window.__kr.total;
   }
 
-  // ---------- 入力 ----------
+  // ---------- 入力（どのキーも鳴る：未マップは rim にフォールバック） ----------
+  const PREVENT = new Set(["Space","Tab","Backspace","Enter","ArrowUp","ArrowDown","ArrowLeft","ArrowRight"]);
   const pressed = new Set();
   addEventListener("keydown", e => {
-    if (e.repeat) return;                                  // オートリピート無視
-    const piece = KEYMAP[e.code];
-    if (!piece) return;
-    if (e.code === "Tab" || e.code === "Backspace") e.preventDefault();
+    if (e.repeat) return;                          // オートリピート無視（1押下=1打）
+    const piece = KEYMAP[e.code] || "rim";         // catch-all: 無音キーをゼロに
+    if (PREVENT.has(e.code)) e.preventDefault();   // スクロール/ナビ抑止
     document.getElementById("hint").classList.add("off");
-    if (pressed.has(e.code)) return;                       // 念のための二重防止
+    if (pressed.has(e.code)) return;
     pressed.add(e.code);
     trigger(piece);
   });
@@ -186,18 +186,19 @@
     audio(); document.getElementById("hint").classList.add("off");
   });
 
-  // ---------- ビジュアル ----------
+  // ---------- ビジュアル（実機の配置を映す：左列=左手側、右列=右手側、下=足） ----------
   const cells = {};
   const kit = document.getElementById("kit");
-  // 左列＝左手ゾーン、右列＝右手ゾーン、として並べる
-  const ORDER = ["tomMid","ride","snare","hihat","tomLow","openhat","rim","crash","kick"];
+  const ORDER = ["hihat","crash","snare","ride","tomHi","tomFloor","pedalHat","openhat","rim","kick"];
+  const FULL = new Set(["rim","kick"]);
   for (const piece of ORDER) {
     const z = ZONES[piece];
     const el = document.createElement("div");
     el.className = "zone p-" + piece;
-    if (piece === "kick") el.style.gridColumn = "1 / span 2";
-    el.innerHTML = `<span class="name">${ICON[piece]} ${z.label}</span>` +
-      `<span class="keys">${z.keys.map(k => k.replace("Key","").replace("Digit","")).join(" ")}</span>`;
+    if (FULL.has(piece)) el.style.gridColumn = "1 / span 2";
+    const keys = z.keys.map(k => k.replace("Key","").replace("Digit","").replace("Arrow","")).slice(0, 8).join(" ");
+    el.innerHTML = `<span class="name"><span class="sym">${z.sym}</span> ${z.label}</span>` +
+      `<span class="keys">${keys}</span>`;
     kit.appendChild(el);
     cells[piece] = el;
   }
@@ -205,7 +206,7 @@
   function flash(piece) {
     const el = cells[piece];
     if (el) { el.classList.add("hit"); setTimeout(() => el.classList.remove("hit"), 70); }
-    ticker = (ICON[piece] + ticker).slice(0, 60);
+    ticker = ((SYM[piece] || "·") + ticker).slice(0, 60);
     document.getElementById("ticker").textContent = ticker;
   }
 })();
